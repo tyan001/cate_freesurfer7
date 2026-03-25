@@ -4,14 +4,8 @@ from pathlib import Path
 import os
 
 def count_nii_paths(root_dir):
-    root_path = Path(root_dir)
-    nii_files = []
-    
-    for path in root_path.rglob('anat/*.nii'):
-        nii_files.append(str(path))
-    
+    nii_files = list(Path(root_dir).glob('*.nii'))
     print(f"Number of NIfTI files: {len(nii_files)}")
-    
     return len(nii_files)
 
 def run_docker_container(cpu_count, directory, container_name, image, license_path):
@@ -54,7 +48,7 @@ def check_license(custom_license_path=None):
     return license_path
 
 if __name__ == "__main__":
-    # python3 scripts/freesurfer/processing_container.py Processing/Both/batch66
+    # python3 processing_container.py path/to/nifti/files --name my-container --image my-fs-fsl-image --license path/to/license.txt
     parser = argparse.ArgumentParser(description="Run FreeSurfer-FSL Docker container with CPU count based on NIfTI files.")
     parser.add_argument('directory', type=str, help="Directory path containing NIfTI files")
     parser.add_argument('--name', type=str, default='fs-fsl', help="Name of the Docker container (default: fs-fsl_<directory_name>)")

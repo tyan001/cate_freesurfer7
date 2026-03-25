@@ -1,0 +1,79 @@
+FROM ubuntu:jammy
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_GB.UTF-8 \
+    FSLDIR=/usr/local/fsl \
+    FSLOUTPUTTYPE=NIFTI_GZ \
+    FREESURFER_HOME=/usr/local/freesurfer \
+    SUBJECTS_DIR=/usr/local/freesurfer/subjects \
+    OS=Linux \
+    FSF_OUTPUT_FORMAT=nii.gz
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        bc \
+        libgomp1 \
+        perl \
+        tcsh \
+        python3 \
+        python3-pip \
+        libgl1-mesa-glx \
+        libxext6 \
+        libsm6 \
+        libxrender1 \
+        libxmu6 \
+        file \
+        dc \
+        procps \
+        ca-certificates \
+        bzip2 \
+        wget \
+        tar \
+        curl \
+        unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# ---------- FSL ----------
+RUN wget -q https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/fslinstaller.py && \
+    python3 ./fslinstaller.py -d ${FSLDIR}/ --skip_ssl_verify && \
+    rm fslinstaller.py && \
+    rm -rf ${FSLDIR}/pkgs/* \
+           ${FSLDIR}/conda-meta/* \
+           ${FSLDIR}/lib/libcuda* \
+           ${FSLDIR}/lib/libcudnn* \
+           ${FSLDIR}/lib/libnvinfer* \
+           ${FSLDIR}/src \
+           ${FSLDIR}/doc 
+
+# ---------- FreeSurfer ----------
+RUN wget -q --no-check-certificate \
+        https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.4.1/freesurfer-linux-ubuntu22_amd64-7.4.1.tar.gz \
+        -O /tmp/fs.tar.gz && \
+    tar --no-same-owner -xzf /tmp/fs.tar.gz -C /tmp && \
+    mv /tmp/freesurfer ${FREESURFER_HOME} && \
+    rm /tmp/fs.tar.gz 
+
+# ---------- FreeSurfer MCR ----------
+RUN ${FREESURFER_HOME}/bin/fs_install_mcr R2019b && \
+    rm -rf /tmp/* /var/tmp/*
+
+# ---------- Workspace & env ----------
+RUN mkdir -p /workspace
+RUN mkdir -p /workspace/suvr
+COPY fs/scripts/* /workspace/fs_scripts
+COPY suvr/* /workspace/suvr
+
+# COPY license.txt ${FREESURFER_HOME}/.license
+
+ENV FSLTCLSH=$FSLDIR/bin/fsltclsh \
+    FSLWISH=$FSLDIR/bin/fslwish \
+    PATH=$FREESURFER_HOME/bin:$PATH \
+    LD_LIBRARY_PATH=$FREESURFER_HOME/MCRv97/v97/runtime/glnxa64:$FREESURFER_HOME/MCRv97/v97/bin/glnxa64:$FREESURFER_HOME/MCRv97/sys/os/glnxa64
+
+
+RUN echo 'source $FREESURFER_HOME/SetUpFreeSurfer.sh' >> /etc/bash.bashrc && \
+    echo 'source $FSLDIR/etc/fslconf/fsl.sh' >> /etc/bash.bashrc
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
