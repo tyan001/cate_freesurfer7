@@ -65,30 +65,17 @@ def setup_logger(log_file):
     
     return logger
 
-def find_nii_paths(root_dir):
+def find_nii_paths(nifti_dir):
     """
-    Find all .nii files located in 'anat' folders within the given directory structure.
-
-    This function traverses through a directory structure that follows the pattern:
-    root_dir/subjectID/Session/anat/*.nii
+    Find all .nii files directly inside the flat nifti/ directory.
 
     Args:
-        root_dir (str): The path to the root directory to start the search from.
+        nifti_dir (str): Path to the nifti/ folder produced by prepare_nifti.py.
 
     Returns:
-        list: A list of Path objects, where each is the full path to a .nii file
-              found in an 'anat' folder.
+        list: A list of Path objects for each .nii file found.
     """
-    root_path = Path(root_dir)
-    nii_files = []
-    
-    # Walk through the directory structure
-    for path in root_path.rglob('*'):
-        # Check if we're in an 'anat' folder
-        if path.parent.name == 'anat' and path.suffix == '.nii':
-            nii_files.append(path)
-    
-    return nii_files
+    return sorted(Path(nifti_dir).glob('*.nii'))
 
 def process_subject_complete(subject_path, logger):
     """
@@ -113,31 +100,28 @@ def process_subject_complete(subject_path, logger):
     
     start_total = time.time()
     logger.info(f"Starting complete processing for subject: {subject}")
-    
+
     # Step 1: FreeSurfer processing
+    # Output goes to fsout/ in the same directory as the nifti files
     fs_start = time.time()
-    fs_path = subject_path.parent.parent / 'freesurfer741'
-    fs_path.mkdir(exist_ok=True)
-    fs_subject_dir = fs_path / subject
-    
-    # Build and execute the recon-all command
-    fs_cmd = f'recon-all -i {subject_path} -subjid {subject} -sd {fs_path} -all'
+    fsout = subject_path.parent / 'fsout'
+    fsout.mkdir(exist_ok=True)
+    fs_cmd = f'recon-all -i {subject_path} -subjid {subject} -sd {fsout} -all'
     logger.info(f"Running FreeSurfer: {fs_cmd}")
-    
+
     fs_return_code = os.system(fs_cmd)
     fs_end = time.time()
-    
+
     result['fs_success'] = fs_return_code == 0
     result['fs_time'] = fs_end - fs_start
-    
+
     if result['fs_success']:
         logger.info(f"FreeSurfer processing for {subject} completed successfully in {result['fs_time']:.2f} seconds")
-        
+
         # Step 2: Hippocampus segmentation (only if FreeSurfer was successful)
         hc_start = time.time()
-        
-        # Build and execute the hippocampus segmentation command
-        hc_cmd = f'segmentHA_T1.sh {subject} {fs_path}'
+
+        hc_cmd = f'segmentHA_T1.sh {subject} {fsout}'
         logger.info(f"Running Hippocampus segmentation: {hc_cmd}")
         
         hc_return_code = os.system(hc_cmd)
@@ -160,27 +144,30 @@ def process_subject_complete(subject_path, logger):
     logger.info(f"Complete processing for {subject} finished in {result['total_time']:.2f} seconds")
     return result
 
-def process_existing_subjects(root_dir, logger):
+def process_existing_subjects(nifti_dir, logger):
     """
-    Find existing FreeSurfer directories and process them with hippocampus segmentation.
-    
+    Find existing FreeSurfer directories in nifti_dir/fsout/ and run hippocampus segmentation.
+
     Args:
-        root_dir (str): The root directory to search for FreeSurfer directories
+        nifti_dir (str): Path to the nifti/ directory (fsout/ is expected inside it)
         logger (Logger): Logger object for logging messages
-        
+
     Returns:
         list: List of processing results
     """
     results = []
-    
-    # Find existing FreeSurfer directories
-    fs_dirs = [p for p in Path(root_dir).glob("*/*/freesurfer741/*") 
-              if p.is_dir() and p.name != 'fsaverage']
-    
-    logger.info(f"Found {len(fs_dirs)} existing FreeSurfer directories")
-    
+
+    fsout = Path(nifti_dir) / 'fsout'
+    if not fsout.exists():
+        logger.error(f"fsout/ directory not found at {fsout}. Run full processing first.")
+        return []
+
+    fs_dirs = [p for p in fsout.iterdir() if p.is_dir() and p.name != 'fsaverage']
+
+    logger.info(f"Found {len(fs_dirs)} existing FreeSurfer subjects in {fsout}")
+
     for fs_dir in fs_dirs:
-        subject = fs_dir.stem
+        subject = fs_dir.name
         result = {
             'subject': subject,
             'fs_success': True,  # Assuming existing directory means success
@@ -189,10 +176,9 @@ def process_existing_subjects(root_dir, logger):
             'hc_time': 0,
             'total_time': 0
         }
-        
-        # Process with hippocampus segmentation
+
         start_time = time.time()
-        hc_cmd = f'segmentHA_T1.sh {subject} {fs_dir.parent}'
+        hc_cmd = f'segmentHA_T1.sh {subject} {fsout}'
         logger.info(f"Running Hippocampus segmentation: {hc_cmd}")
         
         hc_return_code = os.system(hc_cmd)
@@ -213,8 +199,8 @@ def process_existing_subjects(root_dir, logger):
 
 def main():
     parser = argparse.ArgumentParser(description='Process MRI data using FreeSurfer and Hippocampus segmentation.')
-    parser.add_argument('directory', type=str, help='Path to the BIDS directory.')
-    parser.add_argument('--hc-only', action='store_true', help='Run only the Hippocampus segmentation step on existing FreeSurfer results.')
+    parser.add_argument('directory', type=str, help='Path to the nifti/ directory containing flat .nii files.')
+    parser.add_argument('--hc-only', action='store_true', help='Run only the Hippocampus segmentation step on existing subjects in $SUBJECTS_DIR.')
     args = parser.parse_args()
     
     # Set up environment
@@ -234,6 +220,7 @@ def main():
         # Only run hippocampus segmentation on existing FreeSurfer results
         logger.info("=== RUNNING HIPPOCAMPUS SEGMENTATION ONLY ===")
         results = process_existing_subjects(args.directory, logger)
+
     else:
         # Run complete processing for each subject (FreeSurfer followed by hippocampus)
         logger.info("=== STARTING COMPLETE SUBJECT PROCESSING ===")

@@ -1,1 +1,19 @@
+# uv
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# pytest
+.pytest_cache/
+
+# Claude
+.claude
+
+# data / outputs
 nohup.out
+data/
+*.csv
+license.txt
