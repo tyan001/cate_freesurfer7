@@ -4,8 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_GB.UTF-8 \
     FSLDIR=/usr/local/fsl \
     FSLOUTPUTTYPE=NIFTI_GZ \
-    FREESURFER_HOME=/usr/local/freesurfer/8.2.0 \
-    SUBJECTS_DIR=/usr/local/freesurfer/8.2.0/subjects \
+    FREESURFER_HOME=/usr/local/freesurfer \
+    SUBJECTS_DIR=/usr/local/freesurfer \
     OS=Linux \
     FSF_OUTPUT_FORMAT=nii.gz
 
@@ -52,12 +52,15 @@ RUN wget -q --no-check-certificate \
     apt-get update && \
     apt-get install -y --no-install-recommends /tmp/freesurfer.deb && \
     rm /tmp/freesurfer.deb && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    mv /usr/local/freesurfer/8.2.0/* /usr/local/freesurfer/ && \
+    rmdir /usr/local/freesurfer/8.2.0
 
 # ---------- Workspace ----------
+RUN mkdir -p /workspace/fs_scripts
 RUN mkdir -p /workspace/suvr
-COPY fs/scripts/* /workspace/fs_scripts
-COPY suvr/* /workspace/suvr
+COPY fs/scripts/* /workspace/fs_scripts/
+COPY suvr/* /workspace/suvr/
 
 # COPY license.txt ${FREESURFER_HOME}/.license
 
