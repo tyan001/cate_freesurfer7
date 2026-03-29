@@ -54,15 +54,17 @@ if __name__ == "__main__":
     parser.add_argument('--name', type=str, default='fs-fsl', help="Name of the Docker container (default: fs-fsl_<directory_name>)")
     parser.add_argument('--image', type=str, default='fs7-fsl', help="Docker image to use (default: fs-fsl:latest)")
     parser.add_argument('--license', type=str, help="Custom path to the license file")
+    parser.add_argument('--cpus', type=int, default=4, help="Number of CPU cores to allocate (overrides automatic calculation)")
     args = parser.parse_args()
 
     license_path = check_license(args.license)
     
     directory = args.directory
-    cpu_count = count_nii_paths(directory) + 1
+    # cpu_count = count_nii_paths(directory) + 1
     max_cpu_cores = os.cpu_count() or 1
     print(f"Max CPU cores available: {max_cpu_cores}")
-    cpu_count = min(cpu_count, max_cpu_cores-1)
+    cpu_count = min(args.cpus, max_cpu_cores - 1)  # Ensure we leave at least 1 core free
+    # cpu_count = min(cpu_count, max_cpu_cores-1)
     print(f"Using {cpu_count} CPU cores for Docker container")
 
-    run_docker_container(cpu_count, directory, args.name, args.image, license_path)
+    run_docker_container(args.cpus, directory, args.name, args.image, license_path)
