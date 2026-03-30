@@ -1,47 +1,92 @@
+"""
+FreeSurfer statistics extraction and CSV conversion pipeline.
+
+Runs FreeSurfer table-extraction tools (asegstats2table, aparcstats2table,
+ConcatenateSubregionsResults.sh) against a SUBJECTS_DIR, then converts the
+resulting .stats tables to CSV files.  Lateralized concat outputs
+(hipposubfields, amygdalar-nuclei) are merged into a single CSV with lh_/rh_
+column prefixes.
+"""
 import argparse
 import subprocess
 import pandas as pd
 from pathlib import Path
 import os
-import shutil
 
-def run_freesurfer_stats(subjects_dir, subjects):
+
+def run_freesurfer_stats(subjects_dir, subjects, table_dir):
+    """Run FreeSurfer stat-extraction commands and write .stats tables to table_dir."""
     print("Extracting statistics...")
 
     commands = [
-        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --statsfile wmparc.stats --all-segs --tablefile wmparc_stats.txt",
-        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --tablefile aseg_stats.txt",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas volume --skip --tablefile aparc_volume_lh.txt",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas thickness --skip --tablefile aparc_thickness_lh.txt",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas volume --skip --tablefile aparc_volume_rh.txt",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas thickness --skip --tablefile aparc_thickness_rh.txt",
-        f"ConcatenateSubregionsResults.sh  -f hipposubfields.lh.T1.v22.stats -f hipposubfields.rh.T1.v22.stats -f amygdalar-nuclei.lh.T1.v22.stats -f amygdalar-nuclei.rh.T1.v22.stats -s {subjects_dir} -o .",
+        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --statsfile wmparc.stats --all-segs --tablefile {table_dir}/wmparc_stats.stats",
+        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --tablefile {table_dir}/aseg_stats.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas volume --skip --tablefile {table_dir}/aparc_volume_lh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas thickness --skip --tablefile {table_dir}/aparc_thickness_lh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas volume --skip --tablefile {table_dir}/aparc_volume_rh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas thickness --skip --tablefile {table_dir}/aparc_thickness_rh.stats",
+        f"ConcatenateSubregionsResults.sh  -f hipposubfields.lh.T1.v22.stats -f hipposubfields.rh.T1.v22.stats -f amygdalar-nuclei.lh.T1.v22.stats -f amygdalar-nuclei.rh.T1.v22.stats -s {subjects_dir} -o {table_dir}",
     ]
 
     for cmd in commands:
         print(f"Running: {cmd}")
         subprocess.run(cmd, shell=True, cwd=subjects_dir)
 
-def replace_slash(file_path: Path, output_path: Path):
-    data = file_path.read_text()
-    data = data.replace(".nii", "").replace("/", "").replace(" ", "\t")
-    new_file = output_path / (file_path.stem + "_new.txt")
-    new_file.write_text(data)
-    print(f'CREATED: {new_file.name}')
-    return new_file
 
-def convert_txt_to_csv(txt_file: Path, output_dir: Path):
-    df = pd.read_csv(txt_file, delimiter='\t')
-    csv_file = output_dir / (txt_file.stem.replace("_new", "") + ".csv")
+def merge_lateralized_concat(table_dir: Path, csv_dir: Path, name: str):
+    """Merge lh/rh _concat.stats files into one CSV with lh_/rh_ column prefixes.
+
+    Reads ``<name>.lh.T1.v22_concat.stats`` and ``<name>.rh.T1.v22_concat.stats``
+    from table_dir, prefixes every column except the first (subject ID) with
+    ``lh_`` or ``rh_``, merges on the subject ID column, and writes the result
+    to ``<csv_dir>/<name>.csv``.
+    
+    As of when this was written for freesurfer 8.2.0, the subregions outputs for hipposubfields and amygdalar-nuclei 
+    using segmentHA_T1.sh where name as follows:
+    - hipposubfields.lh.T1.v22.stats
+    - hipposubfields.rh.T1.v22.stats
+    - amygdalar-nuclei.lh.T1.v22.stats
+    - amygdalar-nuclei.rh.T1.v22.stats
+    
+    """
+    lh_file = table_dir / f"{name}.lh.T1.v22_concat.stats"
+    rh_file = table_dir / f"{name}.rh.T1.v22_concat.stats"
+
+    if not lh_file.exists() or not rh_file.exists():
+        print(f"Skipping {name} merge: missing lh or rh concat file in {table_dir}")
+        return
+
+    lh_df = pd.read_table(lh_file, delimiter=' ')
+    rh_df = pd.read_table(rh_file, delimiter=' ')
+
+    subj_col = str(lh_df.columns[0])
+
+    lh_df = lh_df.rename(columns={c: f"lh_{c}" for c in lh_df.columns[1:]})
+    rh_df = rh_df.rename(columns={c: f"rh_{c}" for c in rh_df.columns[1:]})
+
+    merged = pd.merge(lh_df, rh_df, left_on=subj_col, right_on=rh_df.columns[0])
+    merged = merged.sort_values(by=subj_col)
+
+    out_file = csv_dir / f"{name}.csv"
+    merged.to_csv(out_file, index=False)
+    print(f'CREATED: {out_file.name} in ./csv/')
+
+
+def convert_table_to_csv(table_file: Path, output_dir: Path):
+    """Convert a tab-delimited .stats table to a sorted CSV file in output_dir."""
+    df = pd.read_table(table_file, delimiter='\t')
+    df = df.sort_values(by=df.columns[0]) # type: ignore
+    csv_file = output_dir / f"{table_file.stem}.csv"
     df.to_csv(csv_file, index=False)
     print(f'CREATED: {csv_file.name} in ./csv/')
+    
 
 def main():
+    """Entry point: parse arguments, run extraction, and produce CSV outputs."""
+    # python3 stats.py -sd fsout/
     parser = argparse.ArgumentParser(description="Process FreeSurfer stats and convert to CSV.")
     parser.add_argument('-sd', '--subjects-dir', type=str, required=True, help='Path to SUBJECTS_DIR containing subject folders')
     args = parser.parse_args()
-
-    # python3 stats.py -sd fsout/
     
     # Inside main()
     subjects_dir = Path(args.subjects_dir).resolve()
@@ -59,38 +104,29 @@ def main():
         print("No subject folders found.")
         return
 
-    # Run stats extraction
-    run_freesurfer_stats(subjects_dir, subjects)
-
     # Create 'stats' folder in current working directory
     stats_dir = Path.cwd() / "stats"
-    txt_dir = stats_dir / "txt"
+    table_dir = stats_dir / "tables"
     csv_dir = stats_dir / "csv"
 
     # Make output folders
     stats_dir.mkdir(exist_ok=True)
-    txt_dir.mkdir(exist_ok=True)
+    table_dir.mkdir(exist_ok=True)
     csv_dir.mkdir(exist_ok=True)
+    
+    # Run stats extraction
+    run_freesurfer_stats(subjects_dir, subjects, table_dir)
 
-    # Move *.txt to txt/ directory
-    for txt_file in list(subjects_dir.glob("*.txt")) + list(Path.cwd().glob("*.txt")):
-        shutil.move(str(txt_file), str(txt_dir / txt_file.name))
 
-    # Clean .txt files
-    new_txt_files = []
-    for txt_file in txt_dir.glob("*.txt"):
-        if not txt_file.name.endswith("_new.txt"):
-            new_txt = replace_slash(txt_file, txt_dir)
-            new_txt_files.append(new_txt)
-            txt_file.unlink()
-
+    for table_file in table_dir.glob("*.stats"):
+        if not table_file.name.endswith("_concat.stats"): # skipping the hipposubfields and amygdalar-nuclei concat files since they are merged separately
+            convert_table_to_csv(table_file, csv_dir)
+        
+    # Merge lateralized concat outputs into single CSVs with lh_/rh_ prefixes
+    merge_lateralized_concat(table_dir, csv_dir, "hipposubfields")
+    merge_lateralized_concat(table_dir, csv_dir, "amygdalar-nuclei")
     print('---------------------------------------')
 
-    # Convert to CSV
-    for new_txt_file in new_txt_files:
-        convert_txt_to_csv(new_txt_file, csv_dir)
-
-    print('---------------------------------------')
     print("CSV files created:", [f.name for f in csv_dir.glob("*.csv")])
     print('DONE.')
 
