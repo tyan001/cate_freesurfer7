@@ -15,8 +15,7 @@ def run_freesurfer_stats(subjects_dir, subjects):
         f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas thickness --skip --tablefile aparc_thickness_lh.txt",
         f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas volume --skip --tablefile aparc_volume_rh.txt",
         f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas thickness --skip --tablefile aparc_thickness_rh.txt",
-        f"quantifyHAsubregions.sh hippoSf T1 hippo.txt",
-        f"quantifyHAsubregions.sh amygNuc T1 amygdala.txt"
+        f"ConcatenateSubregionsResults.sh  -f hipposubfields.lh.T1.v22.stats -f hipposubfields.rh.T1.v22.stats -f amygdalar-nuclei.lh.T1.v22.stats -f amygdalar-nuclei.rh.T1.v22.stats -s {subjects_dir} -o .",
     ]
 
     for cmd in commands:

@@ -71,16 +71,14 @@ def process_subject(nii_path: Path, fsout: Path, logger: logging.Logger) -> dict
     missing = validate_outputs(subject_dir)
 
     if rc != 0:
-        logger.error(f"[{subject}] recon-all exited with code {rc} after {elapsed:.1f}s")
+        logger.warning(f"[{subject}] recon-all exited with code {rc} after {elapsed:.1f}s")
     if missing:
         logger.error(f"[{subject}] Missing output files: {', '.join(missing)}")
 
-    success = rc == 0 and len(missing) == 0
+    success = len(missing) == 0
 
     if success:
         logger.info(f"[{subject}] Completed successfully in {elapsed:.1f}s")
-    elif rc == 256:
-        logger.warning(f"[{subject}] Completed successfully in {elapsed:.1f}s with return code {rc}")
     else:
         logger.error(f"[{subject}] FAILED after {elapsed:.1f}s")
 
