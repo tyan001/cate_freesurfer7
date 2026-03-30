@@ -19,12 +19,12 @@ def run_freesurfer_stats(subjects_dir, subjects, table_dir):
     print("Extracting statistics...")
 
     commands = [
-        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --statsfile wmparc.stats --all-segs --tablefile {table_dir}/wmparc_stats.stats",
-        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --skip --tablefile {table_dir}/aseg_stats.stats",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas volume --skip --tablefile {table_dir}/aparc_volume_lh.stats",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas thickness --skip --tablefile {table_dir}/aparc_thickness_lh.stats",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas volume --skip --tablefile {table_dir}/aparc_volume_rh.stats",
-        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas thickness --skip --tablefile {table_dir}/aparc_thickness_rh.stats",
+        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --etiv --skip --statsfile wmparc.stats --all-segs --tablefile {table_dir}/wmparc_stats.stats",
+        f"asegstats2table --subjects {' '.join(subjects)} --meas volume --etiv --skip --tablefile {table_dir}/aseg_stats.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas volume --etiv --skip --tablefile {table_dir}/aparc_volume_lh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi lh --meas thickness --etiv --skip --tablefile {table_dir}/aparc_thickness_lh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas volume --etiv --skip --tablefile {table_dir}/aparc_volume_rh.stats",
+        f"aparcstats2table --subjects {' '.join(subjects)} --hemi rh --meas thickness --etiv --skip --tablefile {table_dir}/aparc_thickness_rh.stats",
         f"ConcatenateSubregionsResults.sh  -f hipposubfields.lh.T1.v22.stats -f hipposubfields.rh.T1.v22.stats -f amygdalar-nuclei.lh.T1.v22.stats -f amygdalar-nuclei.rh.T1.v22.stats -s {subjects_dir} -o {table_dir}",
     ]
 
@@ -105,7 +105,7 @@ def main():
         return
 
     # Create 'stats' folder in current working directory
-    stats_dir = Path.cwd() / "stats"
+    stats_dir = Path.cwd() / "stats_etiv"
     table_dir = stats_dir / "tables"
     csv_dir = stats_dir / "csv"
 
